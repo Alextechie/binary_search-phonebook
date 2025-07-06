@@ -1,8 +1,8 @@
 import { ContactBST } from "./contactBST";
 import inquirer from "inquirer";
 
-// const menu = ['Add contact', 'Search by name', 'Delete', 'Autocomplete', 'View all', 'Edit contact', 'Exit'];
 const phonebook = new ContactBST();
+
 
 
 async function main() {
