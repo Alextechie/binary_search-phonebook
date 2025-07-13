@@ -1,6 +1,8 @@
 import { ContactBST } from "./contactBST";
 import inquirer from "inquirer";
-
+import { csvFileSync } from "./csvfileSync";
+import fs from "fs";
+import { file } from "bun";
 const phonebook = new ContactBST();
 
 
@@ -11,8 +13,8 @@ async function main() {
             {
                 type: "rawlist",
                 name: 'action',
-                message: 'What action do you want to perform',
-                choices: ['Add contact', 'Search by name', 'Delete', 'Autocomplete', 'View all', 'Edit contact', 'Exit']
+                message: 'What action do you want to perform?',
+                choices: ['Add contact', 'Search by name', 'Export to CSV', 'Import from csv', 'Delete', 'Autocomplete', 'View all', 'Edit contact', 'Exit']
             },
         ])
 
@@ -118,6 +120,111 @@ async function main() {
 
 
                 break;
+
+            case 'Export to CSV':
+                const filename = await inquirer.prompt([
+                    {
+                        type: 'input',
+                        name: 'file',
+                        message: "Enter file name to export(e.g contacts.csv)"
+                    }
+                ])
+
+                const outputFile = filename.file.endsWith('csv') ? filename.file : filename.file + '.csv';
+
+                const lines = ["names,phone"]
+
+                // traverse the tree
+                for (const contact of phonebook) {
+                    const line = `${contact.name},${contact.phone}`
+                    lines.push(line)
+                }
+
+                fs.writeFileSync(outputFile, lines.join('\n'), "utf-8");
+                console.log(`Exported ${lines.length - 1} contacts to ${outputFile}`)
+
+                break;
+
+            case 'Import from csv':
+                // prompt the user to enter the filename 
+                const file = await inquirer.prompt([
+                    {
+                        type: 'input',
+                        name: 'filename',
+                        message: 'Enter file to import to (e.g contacts.csv)'
+                    }
+                ])
+
+                const outputfile = file.filename.endsWith('csv') ? file.filename : file.filename + '.csv';
+
+                let results = [];
+
+                // read through the csv file and store the results onto memory
+                try {
+                    const contacts = fs.readFileSync(outputfile, 'utf-8');
+
+                    if (contacts.length === 0) {
+                        console.log('File is empty');
+                        break;
+                    }
+
+                    const lines = contacts.split('\n')
+
+                    for (let i = 0; i < lines.length; i++) {
+                        const [name, phone] = lines[i]!.split(',');
+                        results.push([name?.trim(), phone?.trim()]);
+                    }
+
+
+                    for (const [name, phone] of results) {
+                        // check if the contact exists
+                        const exists = phonebook.search(name as string);
+
+                        if (exists) {
+                            // ask the user what to do
+                            const options = await inquirer.prompt([
+                                {
+                                    type: 'rawlist',
+                                    name: 'actions',
+                                    message: 'What action do you want to perform? ',
+                                    choices: ['Override', 'ignore', 'rename']
+                                }
+                            ])
+
+                            switch(options.actions){
+                                case 'Override':
+                                    // overwrite the current contact
+                                    phonebook.edit(name as string, phone as string)
+                                    break;
+
+                                case 'ignore':
+                                    break;
+
+                                case 'rename':
+                                    // get a new name for the user
+                                    const contactName = await inquirer.prompt([
+                                        {
+                                            type: 'input',
+                                            name: 'name',
+                                            message: 'New name'
+                                        }
+                                    ])
+
+                                    phonebook.edit(exists.name, phone as string, contactName.name)
+                            }
+
+                        } else {
+                            phonebook.insert(name as string, phone as string);
+                        }
+                    }
+
+                    console.log(`Exported ${results.length - 1} from ${file.filename}`)
+
+                } catch (err) {
+                    console.log(`file ${outputfile} does not exist`);
+                    console.log(`Error: ${err}`)
+                }
+                break
 
             case 'Edit contact':
                 // get the name from user and search for the name 

@@ -10,6 +10,7 @@
     "typescript": "^5"
   },
   "dependencies": {
+    "eslint": "^9.30.1",
     "inquirer": "^12.7.0"
   }
 }
