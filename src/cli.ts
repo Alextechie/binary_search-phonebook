@@ -3,6 +3,8 @@ import inquirer from "inquirer";
 import { csvFileSync } from "./csvfileSync";
 import fs from "fs";
 import { file } from "bun";
+import { fuzzyScore, isValidPhoneNumber, isVlidName, searchContacts } from "../utils/lib";
+import { SocketAddress } from "net";
 const phonebook = new ContactBST();
 
 
@@ -14,7 +16,7 @@ async function main() {
                 type: "rawlist",
                 name: 'action',
                 message: 'What action do you want to perform?',
-                choices: ['Add contact', 'Search by name', 'Export to CSV', 'Import from csv', 'Delete', 'Autocomplete', 'View all', 'Edit contact', 'Exit']
+                choices: ['Add contact', 'Search by name', 'Export to CSV', 'search', 'Import from csv', 'Delete', 'Autocomplete', 'View all', 'Edit contact', 'Exit']
             },
         ])
 
@@ -25,17 +27,23 @@ async function main() {
                     {
                         type: "input",
                         name: "contact_name",
-                        message: "Enter contact name"
+                        message: "Enter contact name",
+                        validate: (name: string) => {
+                            return isVlidName(name) || "Name must only contain letters and atleast 2 characters"
+                        }
                     },
                     {
                         type: "input",
                         name: "phone_number",
-                        message: "Enter phone number"
+                        message: "Enter phone number",
+                        validate: (phone: string) => {
+                            return isValidPhoneNumber(phone) || "Phone number must be atleast 10 digits and should only contain numbers"
+                        }
                     },
                 ])
 
                 // take the values and insert into the binary search tree contact
-                phonebook.insert(contact.contact_name, contact.phone_number)
+                phonebook.insert(contact.contact_name, contact.phone_number);
                 break;
 
             case 'Search by name':
@@ -87,7 +95,40 @@ async function main() {
 
                 break;
 
-            // after deleting a contact print the remaining list
+            case 'search':
+                // ask the user for input
+                const input = await inquirer.prompt([
+                    {
+                        type: 'input',
+                        name: 'name',
+                        message: 'Contact name'
+                    }
+                ]);
+
+                // convert the input to lower case
+                const input_name = String(input.name).toLowerCase();
+
+                let resultes: {name: string, score: number}[] = []
+
+
+
+                // iterate over all the contacts and for each contact extract and convert to lowercase for comparison.
+                for (const c of phonebook) {
+                    const contact_name = c.name.toLowerCase();
+                    let score = fuzzyScore(input_name, contact_name);
+
+                    if(score > 0) resultes.push({name: c.name, score});
+                }
+
+                // sort the results and find the matches
+                resultes.sort((a, b) => b.score - a.score);
+                
+                console.log('\n Best Matches')
+                for(const {name, score} of resultes.slice(0, 10)){
+                    console.log(`${name} -- score: ${score}`)
+                }
+
+                break
 
             case 'Autocomplete':
                 // get contact name input
@@ -155,7 +196,7 @@ async function main() {
                     }
                 ])
 
-                const outputfile = file.filename.endsWith('csv') ? file.filename : file.filename + '.csv';
+                const outputfile = file.filename.endsWith('csv') ? file.filename.trim() : file.filename.trim() + '.csv'.trim();
 
                 let results = [];
 
@@ -170,9 +211,34 @@ async function main() {
 
                     const lines = contacts.split('\n')
 
+                    // for (let i = 0; i < lines.length; i++) {
+                    //     const [name, phone] = lines[i]!.split(',');
+                    //     if(!name || !phone) continue
+                    //     results.push([name?.trim(), phone?.trim()]);
+                    // }
+
+
                     for (let i = 0; i < lines.length; i++) {
-                        const [name, phone] = lines[i]!.split(',');
-                        results.push([name?.trim(), phone?.trim()]);
+                        const [rawName, rawPhone] = lines[i]!.split(",");
+                        const name = rawName?.trim();
+                        const phone = rawPhone?.trim();
+
+
+                        if (!name || !phone) {
+                            console.log(`Skipping line ${i + 1}: missing name or phone number`);
+                            continue;
+                        }
+
+                        if (!isVlidName(name)) {
+                            console.log(`Skipping line ${i + 1}. Invalid name "${name}"`);
+                            continue;
+                        }
+
+                        if (!isValidPhoneNumber(phone)) {
+                            console.log(`Skipping line ${i + 1}. Invalid phone number "${phone}"`);
+                        }
+
+                        results.push([name, phone])
                     }
 
 
@@ -191,7 +257,7 @@ async function main() {
                                 }
                             ])
 
-                            switch(options.actions){
+                            switch (options.actions) {
                                 case 'Override':
                                     // overwrite the current contact
                                     phonebook.edit(name as string, phone as string)
